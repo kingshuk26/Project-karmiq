@@ -95,6 +95,80 @@ app.post("/signup", async (req, res) => {
   }
 });
 
+
+app.post("/worker/signup", async (req, res) => {
+  try {
+
+    const { name, phone, password } = req.body;
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const userResult = await pool.query(
+      `INSERT INTO users (name, phone, password_hash, role)
+       VALUES ($1, $2, $3, 'worker')
+       RETURNING *`,
+      [name, phone, hashedPassword]
+    );
+
+    const user = userResult.rows[0];
+
+    await pool.query(
+      `INSERT INTO workers (user_id)
+       VALUES ($1,)`,
+      [user.id]
+    );
+
+    res.json({ message: "Worker signup successful" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Worker signup failed" });
+  }
+});
+
+
+
+
+app.post("/worker/login", async (req, res) => {
+  try {
+
+    const { phone, password } = req.body;
+
+    const result = await pool.query(
+      `SELECT * FROM users WHERE phone = $1 AND role = 'worker'`,
+      [phone]
+    );
+
+    const user = result.rows[0];
+
+    const validPassword = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+
+    if (!user || !validPassword) {
+      return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ error: "Worker login failed" });
+  }
+});
+
 app.post("/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
